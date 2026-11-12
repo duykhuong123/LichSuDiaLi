@@ -1,5 +1,5 @@
 /* Service worker: lưu đệm tệp tĩnh để mở lại khi mất mạng. Đổi VERSION khi cập nhật để làm mới bộ nhớ đệm. */
-var VERSION = 'dd-v4', CORE = ['./', 'index.html', 'assets/css/styles.css', 'assets/art/drum.svg', 'manifest.webmanifest',
+var VERSION = 'dd-v5', CORE = ['./', 'index.html', 'assets/css/styles.css', 'assets/art/drum.svg', 'manifest.webmanifest',
  'assets/fonts/Inter-Regular.woff', 'assets/fonts/Inter-SemiBold.woff', 'assets/fonts/Inter-ExtraBold.woff',
  'assets/js/core.js', 'assets/js/config.js', 'assets/js/sync.js', 'assets/js/geo.js', 'assets/js/exam.js', 'assets/js/views.js', 'assets/js/app.js',
  'assets/js/data/geo-world.js', 'assets/js/data/geo-vn.js', 'assets/js/data/catalog.js', 'assets/js/data/cards-6-7.js', 'assets/js/data/cards-8-9.js',
