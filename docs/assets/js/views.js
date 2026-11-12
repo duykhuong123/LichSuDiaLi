@@ -31,12 +31,12 @@
     var st = { s: 'all', g: 'all', q: '' }, list = h('div', { class: 'grid' });
     function draw() {
       u.clear(list); var n = 0;
-      D.exams.forEach(function (e) {
+      D.examlib.all().forEach(function (e) {
         if (st.s !== 'all' && e.subject !== st.s) return; if (st.g !== 'all' && String(e.grade) !== st.g) return; if (st.q && e.title.toLowerCase().indexOf(st.q.toLowerCase()) < 0) return; n++;
         var best = D.exam.results().filter(function (r) { return r.examId === e.id; }).reduce(function (m, r) { return Math.max(m, r.score); }, -1);
         list.appendChild(h('div', { class: 'card' }, h('span', { class: u.tagCls(e.subject) }, u.subjName(e.subject)), h('span', { class: 'tag' }, 'Khối ' + e.grade), h('span', { class: 'tag' }, e.kind + ' · ' + e.minutes + ' phút'), h('h3', null, e.title),
           best >= 0 ? h('p', { class: 'tag g' }, 'Điểm cao nhất trên máy này: ' + u.fmt(best)) : null,
-          h('div', { class: 'bar' }, h('a', { class: 'btn sm', href: '#/exam/' + e.id }, 'Vào thi'), h('button', { class: 'btn sm ghost', onclick: function () { D.exam.printSheet(e.id, false); } }, 'In đề'))));
+          h('div', { class: 'bar' }, h('a', { class: 'btn sm', href: '#/exam/' + e.id }, 'Vào thi'), (D.auth.isTeacher() ? h('button', { class: 'btn sm ghost', onclick: function () { D.exam.printSheet(e.id, false); } }, 'In đề') : h('a', { class: 'btn sm ghost lock', href: '#/teacher', title: 'Chỉ giáo viên trong tổ' }, '🔒 In đề')))));
       });
       if (!n) list.appendChild(h('p', null, 'Không có đề phù hợp.'));
     }
@@ -44,8 +44,13 @@
     root.appendChild(head('Ngân hàng đề kiểm tra', 'Mỗi đề gồm 16 câu trắc nghiệm, 1 câu Đúng/Sai 4 ý và 1 câu trả lời ngắn (tổng 10 điểm), có giải thích sau khi nộp. Nội dung do tổ chuyên môn rà soát trước khi dùng chính thức.'));
     root.appendChild(sp); root.appendChild(h('div', { class: 'bar' }, gradeSel(st.g, function (v) { st.g = v; draw(); }), h('input', { type: 'search', placeholder: 'Tìm đề…', 'aria-label': 'Tìm đề', oninput: function (e) { st.q = e.target.value; draw(); } })));
     root.appendChild(list); draw();
+    if (D.examlib.enabled()) D.examlib.refresh().then(function () { if (root.isConnected) draw(); });
   };
-  V.exam = function (root, id) { D.exam.render(root, id); };
+  V.exam = function (root, id) {
+    if (D.examSets[id] || !/^u-/.test(id)) return D.exam.render(root, id);
+    root.appendChild(h('p', { role: 'status' }, 'Đang tải đề…'));
+    D.examlib.ensure(id).then(function () { if (root.isConnected) { u.clear(root); D.exam.render(root, id); } }, function (e) { if (root.isConnected) { u.clear(root); root.appendChild(h('div', { class: 'note bad' }, 'Không tải được đề: ' + e.message)); root.appendChild(h('a', { class: 'btn', href: '#/exams' }, 'Về danh sách đề')); } });
+  };
 
   /* ÔN TẬP: THẺ KIẾN THỨC */
   V.review = function (root) {
@@ -174,8 +179,8 @@
       var rd = new FileReader(); rd.onload = function () {
         var rows = [], errs = [], txt = String(rd.result).replace(/^﻿/, '');
         try { if (/\.json$/i.test(f.name)) { var j = JSON.parse(txt); rows = (Array.isArray(j) ? j : j.results || []).map(function (x) { return [x.name, x.cls, x.examId, x.score, x.at]; }); } else { var c = parseCSV(txt); if (c.length && /name/i.test(c[0][0])) c.shift(); rows = c; } } catch (er) { u.toast('File không đọc được: ' + er.message, 'bad'); return; }
-        var good = []; var ids = D.exams.map(function (x) { return x.id; });
-        rows.forEach(function (r, i) { var sc = parseFloat(String(r[3]).replace(',', '.')), at = new Date(r[4]); if (ids.indexOf(r[2]) < 0) errs.push('Dòng ' + (i + 1) + ': mã đề không có trong hệ thống'); else if (!isFinite(sc) || sc < 0 || sc > 10) errs.push('Dòng ' + (i + 1) + ': điểm phải từ 0 đến 10'); else if (isNaN(at)) errs.push('Dòng ' + (i + 1) + ': thời gian không hợp lệ'); else good.push({ examId: r[2], title: D.exams.filter(function (x) { return x.id === r[2]; })[0].title, name: String(r[0] || '').slice(0, 60), cls: String(r[1] || '').slice(0, 12), score: sc, max: 10, at: at.toISOString(), src: 'import', viol: (r[5] !== undefined && r[5] !== '' && isFinite(r[5])) ? { n: +r[5], secs: +r[6] || 0, log: [] } : undefined }); });
+        var good = []; var ids = D.exams.map(function (x) { return x.id; }); function knownId(x) { return ids.indexOf(x) >= 0 || /^u-[0-9a-f]{6,}$/.test(x); }
+        rows.forEach(function (r, i) { var sc = parseFloat(String(r[3]).replace(',', '.')), at = new Date(r[4]); if (!knownId(r[2])) errs.push('Dòng ' + (i + 1) + ': mã đề không có trong hệ thống'); else if (!isFinite(sc) || sc < 0 || sc > 10) errs.push('Dòng ' + (i + 1) + ': điểm phải từ 0 đến 10'); else if (isNaN(at)) errs.push('Dòng ' + (i + 1) + ': thời gian không hợp lệ'); else good.push({ examId: r[2], title: D.exams.filter(function (x) { return x.id === r[2]; })[0].title, name: String(r[0] || '').slice(0, 60), cls: String(r[1] || '').slice(0, 12), score: sc, max: 10, at: at.toISOString(), src: 'import', viol: (r[5] !== undefined && r[5] !== '' && isFinite(r[5])) ? { n: +r[5], secs: +r[6] || 0, log: [] } : undefined }); });
         u.clear(prev); prev.appendChild(h('div', { class: 'card' }, h('h3', null, 'Xem trước nhập điểm'), h('p', null, good.length + ' dòng hợp lệ, ' + errs.length + ' dòng lỗi (sẽ bỏ qua).'), errs.slice(0, 8).map(function (x) { return h('div', { class: 'note bad' }, x); }),
           good.length ? h('div', { class: 'bar' }, h('button', { class: 'btn', onclick: function () { var cur = D.exam.results(), seen = {}; cur.forEach(function (r) { seen[r.examId + r.at + r.name] = 1; }); var add = good.filter(function (r) { return !seen[r.examId + r.at + r.name]; }); S.set('results', cur.concat(add)); u.clear(prev); draw(); u.toast('Đã thêm ' + add.length + ' kết quả (bỏ qua ' + (good.length - add.length) + ' dòng trùng). Dữ liệu cũ không bị ghi đè.', 'ok'); } }, 'Xác nhận thêm vào bảng điểm'), h('button', { class: 'btn ghost', onclick: function () { u.clear(prev); } }, 'Hủy')) : null));
       }; rd.readAsText(f); e.target.value = '';
@@ -186,11 +191,11 @@
   };
 
   /* GIÁO VIÊN */
-  V.teacher = function (root) {
+  function teacherBody(root) {
     root.appendChild(head('Công cụ giáo viên', 'Thống kê đề, in đề kèm đáp án, kiểm tra cấu trúc.'));
-    root.appendChild(h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, ['Đề', 'Phân bố đáp án A/B/C/D', 'Mức độ', 'In'].map(function (x) { return h('th', null, x); }))), h('tbody', null, D.exams.map(function (e) {
+    root.appendChild(h('div', { class: 'scroll' }, h('table', null, h('thead', null, h('tr', null, ['Đề', 'Phân bố đáp án A/B/C/D', 'Mức độ', 'In'].map(function (x) { return h('th', null, x); }))), h('tbody', null, D.exams.filter(function (e) { return !e.hidden && !e.server && D.examSets[e.id]; }).map(function (e) {
       var s = D.examSets[e.id], c = [0, 0, 0, 0], lv = {}; s.mcq.forEach(function (q) { c[q.ans]++; lv[q.level] = (lv[q.level] || 0) + 1; });
-      return h('tr', null, h('td', null, e.title), h('td', null, c.join(' / ') + (e.id === 'exam-int-8-gk' ? ' (giữ thứ tự gốc)' : ' (xáo khi thi)')), h('td', null, Object.keys(lv).map(function (k) { return k + ': ' + lv[k]; }).join(', ')), h('td', null, h('button', { class: 'btn sm ghost', onclick: function () { D.exam.printSheet(e.id, true); } }, 'Đề + đáp án')));
+      return h('tr', null, h('td', null, e.title), h('td', null, c.join(' / ') + (e.id === 'exam-int-8-gk' ? ' (giữ thứ tự gốc)' : ' (xáo khi thi)')), h('td', null, Object.keys(lv).map(function (k) { return k + ': ' + lv[k]; }).join(', ')), h('td', null, h('a', { class: 'btn sm', href: '#/xemde/' + e.id }, 'Xem đề + đáp án'), ' ', h('button', { class: 'btn sm ghost', onclick: function () { D.exam.printSheet(e.id, true); } }, 'In đề + đáp án')));
     })))));
     (function () {
       var box = h('div', { class: 'card', style: 'margin-top:16px' }, h('h3', null, 'Quy định chống gian lận khi làm bài'));
@@ -207,6 +212,105 @@
       root.appendChild(box);
     })();
     root.appendChild(h('p', { class: 'note', style: 'margin-top:12px' }, 'Phân bố đáp án gốc lệch về A ở một số đề; khi học sinh làm bài, thứ tự phương án được xáo ngẫu nhiên theo từng lượt để giảm đoán mò. Đề kiểm tra liên môn lớp 8 giữ nguyên thứ tự gốc. Giáo viên nên rà soát nội dung các đề trước khi dùng chính thức.'));
+  }
+
+
+
+  V.teacher = function (root) {
+    if (D.auth.isTeacher()) {
+      root.appendChild(h('div', { class: 'note ok' }, 'Đã đăng nhập: ' + D.auth.who() + '. ', h('button', { class: 'btn sm ghost', onclick: function () { D.auth.logout(); location.reload(); } }, D.auth.remembered() ? 'Đăng xuất và quên thiết bị này' : 'Đăng xuất')));
+      D.examup(root); teacherBody(root); siteEditor(root); return;
+    }
+    root.appendChild(head('Khu vực giáo viên', 'Xem đề, đáp án, in đề, thống kê và chỉnh sửa thông tin trang chỉ dành cho giáo viên trong Tổ Lịch sử - Địa lí.'));
+    if (D.auth.remembered() && D.auth.enabled()) { var ab = h('div', { class: 'note', role: 'status' }, 'Thiết bị đã được nhớ — đang đăng nhập tự động…'); root.appendChild(ab); D.auth.auto().then(function (ok) { if (ok) location.reload(); else { ab.textContent = 'Thiết bị đã hết hạn ghi nhớ hoặc không còn quyền. Hãy đăng nhập bằng mã gmail.'; ab.className = 'note bad'; } }); }
+    if (!D.auth.enabled()) root.appendChild(h('div', { class: 'note bad' }, 'Đăng nhập bằng mã gửi qua gmail cần máy chủ Google của tổ. Chưa cấu hình: xem guide/GOOGLE-SHEET.md (điền syncUrl trong config.js). Khi chưa cấu hình, khu vực này bị khoá.'));
+    var mail = h('input', { class: 't', type: 'email', autocomplete: 'email', placeholder: 'Gmail đã đăng ký với tổ', 'aria-label': 'Gmail', style: 'width:100%' });
+    var code = h('input', { class: 't', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 6, placeholder: 'Mã 6 số', 'aria-label': 'Mã 6 số', style: 'width:100%;letter-spacing:.3em;font-size:1.2rem' });
+    var rem = h('input', { type: 'checkbox', id: 'remdev' }), status = h('div', { role: 'status', 'aria-live': 'polite', style: 'margin:10px 0;font-weight:600' }), step2 = h('div', { hidden: true }), busy = false, wait = 0, tick = 0;
+    var sendBtn = h('button', { class: 'btn', disabled: !D.auth.enabled(), onclick: send }, 'Gửi mã vào gmail');
+    var okBtn = h('button', { class: 'btn', onclick: check }, 'Đăng nhập');
+    function say(t, bad) { status.style.color = bad ? 'var(--bad)' : ''; status.textContent = t; }
+    function cool() { clearInterval(tick); wait = 60; sendBtn.disabled = true; tick = setInterval(function () { wait--; if (wait <= 0) { clearInterval(tick); sendBtn.disabled = !D.auth.enabled(); sendBtn.textContent = 'Gửi lại mã'; } else sendBtn.textContent = 'Gửi lại mã (' + wait + ' giây)'; }, 1000); sendBtn.textContent = 'Gửi lại mã (60 giây)'; }
+    function send() {
+      if (busy) return; if (!/^\S+@\S+\.\S+$/.test(mail.value.trim())) return say('Hãy nhập đúng địa chỉ gmail.', true);
+      busy = true; say('Đang gửi…');
+      D.auth.sendCode(mail.value).then(function (j) { cool(); step2.hidden = false; say(j.message || 'Nếu gmail có trong danh sách giáo viên, mã đã được gửi (kiểm tra cả mục Spam). Mã có hiệu lực 10 phút.'); code.focus(); }, function (e) { say(e.message, true); }).then(function () { busy = false; });
+    }
+    function check() {
+      if (busy) return; if (!/^\d{6}$/.test(code.value.trim())) return say('Mã gồm đúng 6 chữ số.', true);
+      busy = true; say('Đang kiểm tra…');
+      D.auth.verifyCode(mail.value, code.value.trim(), rem.checked).then(function (j) { say('Xin chào ' + j.name + '. Đang vào…'); setTimeout(function () { location.reload(); }, 300); }, function (e) { busy = false; say(e.message, true); });
+    }
+    mail.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); }); code.addEventListener('keydown', function (e) { if (e.key === 'Enter') check(); });
+    step2.appendChild(h('label', { style: 'display:block;margin:10px 0' }, h('b', null, 'Nhập mã vừa nhận trong gmail'), code)); step2.appendChild(h('label', { style: 'display:block;margin:10px 0;font-weight:400' }, rem, ' Ghi nhớ thiết bị này 30 ngày, lần sau không cần mã ', h('small', { style: 'color:var(--mut)' }, '(chỉ chọn trên máy/điện thoại của riêng bạn, đừng chọn ở máy dùng chung)'))); step2.appendChild(okBtn);
+    root._stop = function () { clearInterval(tick); };
+    root.appendChild(h('div', { class: 'card', style: 'max-width:520px' }, h('h3', null, 'Đăng nhập bằng mã gửi qua gmail'),
+      h('ol', null, h('li', null, 'Nhập gmail của bạn (đã đăng ký với tổ), bấm "Gửi mã vào gmail".'), h('li', null, 'Mở gmail, lấy mã 6 số (có hiệu lực 10 phút).'), h('li', null, 'Nhập mã và bấm "Đăng nhập".')),
+      h('label', { style: 'display:block;margin:10px 0' }, h('b', null, 'Gmail'), mail), sendBtn, status, step2));
+    root.appendChild(h('p', { class: 'note', style: 'margin-top:14px;max-width:640px' }, 'Lưu ý: đây là cổng giao diện để học sinh không xem/in đề. Trang chạy trên trình duyệt nên người rành kĩ thuật vẫn có thể đọc dữ liệu đề trong mã nguồn; không dùng để giữ bí mật đề thi chính thức.'));
+  };
+
+  /* CHỈNH SỬA THÔNG TIN TRANG (xuất tệp site.js để thay trên GitHub) */
+  function siteEditor(root) {
+    var cur = S.get('siteDraft', null) || D.site || {}, st = JSON.parse(JSON.stringify({ principal: cur.principal || '', phone: cur.phone || D.school.phone, address: cur.address || D.school.address, tech: cur.tech || '', teachers: cur.teachers || [], schedule: D.schedule }));
+    var box = h('div', { class: 'card', style: 'margin-top:18px' }), listT = h('div'), listS = h('div');
+    function field(label, key, ph) { return h('label', { style: 'display:block;margin:8px 0' }, h('b', null, label), h('input', { class: 't', style: 'width:100%', value: st[key], placeholder: ph || '', oninput: function (e) { st[key] = e.target.value; } })); }
+    function drawT() {
+      u.clear(listT);
+      st.teachers.forEach(function (t, i) {
+        listT.appendChild(h('div', { class: 'bar' },
+          h('input', { class: 't', value: t.name, style: 'flex:1;min-width:200px', 'aria-label': 'Họ tên', oninput: function (e) { t.name = e.target.value; } }),
+          h('select', { class: 't', 'aria-label': 'Vai trò', onchange: function (e) { t.role = e.target.value; } }, [['', 'Giáo viên'], ['TT', 'TT — Tổ trưởng'], ['TP', 'TP — Tổ phó']].map(function (o) { return h('option', { value: o[0], selected: (t.role || '') === o[0] }, o[1]); })),
+          h('button', { class: 'btn sm ghost', 'aria-label': 'Lên', disabled: i === 0, onclick: function () { st.teachers.splice(i - 1, 0, st.teachers.splice(i, 1)[0]); drawT(); } }, '↑'),
+          h('button', { class: 'btn sm ghost', 'aria-label': 'Xuống', disabled: i === st.teachers.length - 1, onclick: function () { st.teachers.splice(i + 1, 0, st.teachers.splice(i, 1)[0]); drawT(); } }, '↓'),
+          h('button', { class: 'btn sm danger', onclick: function () { if (confirm('Xoá "' + t.name + '" khỏi danh sách? (chỉ xoá khỏi danh sách hiển thị)')) { st.teachers.splice(i, 1); drawT(); } } }, 'Xoá')));
+      });
+      var n = h('input', { class: 't', placeholder: 'Họ tên mới (vd: Cô Nguyễn Văn B)', style: 'flex:1;min-width:200px', 'aria-label': 'Họ tên mới' });
+      listT.appendChild(h('div', { class: 'bar', style: 'margin-top:10px' }, n, h('button', { class: 'btn sm', onclick: function () { if (!n.value.trim()) return; st.teachers.push({ name: n.value.trim(), role: '' }); drawT(); } }, '+ Thêm vào danh sách hiển thị')));
+      listT.appendChild(h('p', { style: 'font-size:.85rem;color:var(--mut)' }, 'Danh sách này chỉ để HIỂN THỊ ở chân trang. Quyền đăng nhập giáo viên được quản lý riêng trong Google Sheet (trang "GiaoVien") — thêm/xoá người ở đó.'));
+    }
+    function drawS() {
+      u.clear(listS);
+      st.schedule.forEach(function (x, i) {
+        listS.appendChild(h('div', { class: 'bar' }, h('input', { class: 't', value: x.when, placeholder: 'Thời gian', style: 'width:200px', oninput: function (e) { x.when = e.target.value; } }), h('input', { class: 't', value: x.who, placeholder: 'Khối', style: 'width:110px', oninput: function (e) { x.who = e.target.value; } }),
+          h('input', { class: 't', value: x.what, placeholder: 'Nội dung', style: 'flex:1;min-width:220px', oninput: function (e) { x.what = e.target.value; } }),
+          h('select', { class: 't', 'aria-label': 'Đề', onchange: function (e) { x.exam = e.target.value || null; } }, [h('option', { value: '' }, '(không gắn đề)')].concat(D.exams.map(function (d) { return h('option', { value: d.id, selected: x.exam === d.id }, d.title.slice(0, 48)); }))),
+          h('button', { class: 'btn sm danger', onclick: function () { st.schedule.splice(i, 1); drawS(); } }, 'Xoá')));
+      });
+      listS.appendChild(h('button', { class: 'btn sm', onclick: function () { st.schedule.push({ when: '', who: '', what: '', exam: null }); drawS(); } }, '+ Thêm lịch'));
+    }
+    function finalize() {
+      return Promise.resolve({ principal: st.principal.trim(), phone: st.phone.trim(), address: st.address.trim(), tech: st.tech.trim(), teachers: st.teachers.map(function (t) { return { name: String(t.name).trim(), role: t.role || '' }; }).filter(function (t) { return t.name; }), schedule: st.schedule.filter(function (x) { return x.what || x.when; }) });
+    }
+    box.appendChild(h('h3', null, 'Chỉnh sửa thông tin trang'));
+    box.appendChild(h('p', { style: 'color:var(--mut)' }, 'Sửa các ô bên dưới → bấm "Xem thử" để thấy ngay trên máy này → bấm "Tải tệp site.js" rồi thay vào GitHub để mọi người cùng thấy.'));
+    box.appendChild(field('Hiệu trưởng (để trống = không hiển thị)', 'principal')); box.appendChild(field('Phụ trách kỹ thuật', 'tech')); box.appendChild(field('Điện thoại trường', 'phone')); box.appendChild(field('Địa chỉ', 'address'));
+    box.appendChild(h('h4', { style: 'margin-top:14px' }, 'Giáo viên trong tổ')); box.appendChild(listT);
+    box.appendChild(h('h4', { style: 'margin-top:14px' }, 'Lịch kiểm tra (hiện ở thanh thông báo và trang chủ)')); box.appendChild(listS);
+    box.appendChild(h('div', { class: 'bar', style: 'margin-top:16px' },
+      h('button', { class: 'btn alt', onclick: function () { finalize().then(function (o) { S.set('siteDraft', o); D.applySite(); u.toast('Đã áp dụng bản xem thử trên máy này (học sinh chưa thấy).', 'ok'); }, function (e) { u.toast(e.message, 'bad'); }); } }, 'Xem thử'),
+      h('button', { class: 'btn', onclick: function () { finalize().then(function (o) { u.download('site.js', "/* THÔNG TIN TRANG — xem hướng dẫn trong guide/EDIT-SITE.md. */\n(function(){var D=(window.DD=window.DD||{});D.site=" + JSON.stringify(o, null, 1) + ";})();\n", 'application/javascript'); }, function (e) { u.toast(e.message, 'bad'); }); } }, 'Tải tệp site.js'),
+      h('button', { class: 'btn ghost', onclick: function () { S.del('siteDraft'); location.reload(); } }, 'Bỏ bản xem thử')));
+    box.appendChild(h('details', null, h('summary', null, 'Cách đưa thay đổi lên GitHub (để mọi học sinh thấy)'), h('ol', null,
+      h('li', null, 'Bấm "Tải tệp site.js" (tệp được tải về máy).'), h('li', null, 'Vào kho GitHub của tổ → mở thư mục docs/assets/js/data.'), h('li', null, 'Bấm Add file → Upload files → kéo tệp site.js vào (cùng tên, sẽ thay tệp cũ) → Commit changes.'),
+      h('li', null, 'Đợi 1–2 phút rồi tải lại trang (Ctrl+F5). Xong.'), h('li', null, 'Sau đó bấm "Bỏ bản xem thử" trên máy này để không còn xem bản nháp.'))));
+    root.appendChild(box); drawT(); drawS();
+  }
+
+  /* XEM ĐỀ + ĐÁP ÁN (chỉ giáo viên đăng nhập) */
+  V.xemde = function (root, id) {
+    if (D.auth.isTeacher() && !D.examlib.hasFull(id) && /^u-/.test(id)) { root.appendChild(h('p', { role: 'status' }, 'Đang tải đề…')); return D.examlib.ensureTeacher(id).then(function () { if (root.isConnected) { u.clear(root); xemde(root, id); } }, function (e) { if (root.isConnected) { u.clear(root); root.appendChild(h('div', { class: 'note bad' }, e.message)); } }); }
+    xemde(root, id);
+  };
+  function xemde(root, id) {
+    var m = D.exams.filter(function (x) { return x.id === id; })[0], s = D.examSets[id];
+    if (!D.auth.isTeacher()) { root.appendChild(head('Chỉ dành cho giáo viên')); root.appendChild(h('p', null, 'Hãy đăng nhập bằng mã gửi qua gmail của bạn để xem đề và đáp án.')); root.appendChild(h('a', { class: 'btn', href: '#/teacher' }, 'Đăng nhập giáo viên')); return; }
+    if (!m || !s) { root.appendChild(h('div', { class: 'note bad' }, 'Không tìm thấy đề.')); return; }
+    root.appendChild(h('div', { class: 'bar noprint' }, h('a', { class: 'btn ghost sm', href: '#/teacher' }, '← Quay lại'), h('button', { class: 'btn sm', onclick: function () { D.exam.printSheet(id, true); } }, 'In đề + đáp án')));
+    root.appendChild(head(m.title, 'Đáp án đúng được tô xanh. Chỉ giáo viên đã đăng nhập mới thấy trang này.'));
+    s.mcq.forEach(function (q, i) { root.appendChild(h('div', { class: 'qbox', style: 'margin-top:10px' }, h('h3', null, 'Câu ' + (i + 1) + '. ' + q.q), q.opts.map(function (o, k) { return h('div', { class: 'opt' + (k === q.ans ? ' right' : '') }, h('b', null, 'ABCD'[k]), h('span', null, o)); }), h('div', { class: 'exp' }, 'Giải thích: ' + q.exp))); });
+    root.appendChild(h('div', { class: 'qbox', style: 'margin-top:10px' }, h('h3', null, 'Câu 17 (Đúng/Sai). ' + s.tf.prompt), s.tf.items.map(function (it, k) { return h('div', { class: 'tfrow' }, h('span', null, 'abcd'[k] + ') ' + it.text), h('span', { class: 'tag g' }, it.ans ? 'Đúng' : 'Sai')); })));
+    root.appendChild(h('div', { class: 'qbox', style: 'margin-top:10px' }, h('h3', null, 'Câu 18 (Trả lời ngắn). ' + s.sa.prompt), h('p', null, 'Đáp án: ' + s.sa.ans), h('div', { class: 'exp' }, s.sa.exp || '')));
   };
 
   /* QUẢN TRỊ — sao lưu / khôi phục cục bộ */
@@ -234,7 +338,7 @@
   /* GIỚI THIỆU / CÀI ĐẶT ỨNG DỤNG */
   V.about = function (root) {
     root.appendChild(head('Giới thiệu & cài đặt'));
-    root.appendChild(h('div', { class: 'card' }, h('h3', null, D.school.name + ' — ' + D.school.dept), h('p', null, 'Địa chỉ: ' + D.school.address), h('p', null, 'Điện thoại: ' + D.school.phone), h('p', null, 'Hiệu trưởng: ' + D.school.principal), h('p', null, 'Phụ trách kỹ thuật và chuyên môn: ' + D.school.tech)));
+    root.appendChild(h('div', { class: 'card' }, h('h3', null, D.school.name + ' — ' + D.school.dept), h('p', null, 'Địa chỉ: ' + D.school.address), h('p', null, 'Điện thoại: ' + D.school.phone), D.school.principal ? h('p', null, 'Hiệu trưởng: ' + D.school.principal) : null, D.school.tech ? h('p', null, 'Phụ trách kỹ thuật: ' + D.school.tech) : null));
     root.appendChild(h('div', { class: 'card', style: 'margin-top:14px' }, h('h3', null, 'Thêm vào màn hình chính'), h('p', null, 'Android (Chrome): menu ⋮ → "Thêm vào màn hình chính". iPhone (Safari): nút Chia sẻ → "Thêm vào MH chính". Sau lần mở đầu có mạng, trang có thể mở lại khi không có mạng (nếu trình duyệt cho phép lưu bộ nhớ đệm).')));
   };
   window.DD.views = V;

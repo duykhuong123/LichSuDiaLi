@@ -2,6 +2,23 @@
 (function () {
   var D = window.DD, u = D.u, h = u.h, S = u.store;
   var NAV = [['#/home', 'Trang chủ'], ['#/exams', 'Kiểm tra'], ['#/review', 'Ôn tập'], ['#/atlas', 'Địa cầu & Atlas'], ['#/timeline', 'Thời gian'], ['#/mindmaps', 'Sơ đồ tư duy'], ['#/drum', 'Trống đồng'], ['#/ai', 'Trợ lý'], ['#/scores', 'Bảng điểm'], ['#/teacher', 'Giáo viên'], ['#/admin', 'Quản trị']];
+  var SCHED0 = D.schedule.slice();
+  function applySite() {
+    var src = S.get('siteDraft', null) || D.site || {}, sc = D.school;
+    ['principal', 'phone', 'address', 'tech'].forEach(function (k) { if (k in src) sc[k] = src[k]; });
+    sc.teachers = (src.teachers || []).map(function (t) { return typeof t === 'string' ? { name: t, role: '' } : t; });
+    D.schedule = src.schedule ? src.schedule.slice() : SCHED0.slice();
+  }
+  function roleTxt(r) { return r === 'TT' ? ' (TT)' : r === 'TP' ? ' (TP)' : ''; }
+  function renderFooter() {
+    var f = u.clear(document.getElementById('foot')), s = D.school;
+    f.appendChild(h('div', null, h('h4', null, s.site), h('p', null, 'Cổng thông tin học tập, kiểm tra đánh giá môn Lịch sử và Địa lí.'), s.principal ? h('p', null, 'Hiệu trưởng: ' + s.principal) : null, s.tech ? h('p', null, 'Phụ trách kỹ thuật: ' + s.tech) : null));
+    f.appendChild(h('div', null, h('h4', null, 'Địa chỉ'), h('p', null, s.name + ', ' + s.address), h('p', null, 'Điện thoại: ' + s.phone)));
+    f.appendChild(h('div', null, h('h4', null, 'Giáo viên ' + s.dept + ' (' + s.teachers.length + ')'), h('ul', null, s.teachers.map(function (t) { return h('li', null, t.name + roleTxt(t.role)); })), S.get('siteDraft', null) ? h('p', { style: 'color:#ffd27a' }, 'Đang xem BẢN XEM THỬ trên máy này.') : null));
+    document.getElementById('copy').textContent = '© 2026 ' + s.name + ' — ' + s.site + '.';
+  }
+  D.applySite = function () { applySite(); renderFooter(); };
+  applySite();
   var main = document.getElementById('main'), nav = document.getElementById('nav'), cur = null;
   NAV.forEach(function (n) { nav.appendChild(h('a', { href: n[0], 'data-r': n[0] }, n[1])); });
   document.getElementById('menu').addEventListener('click', function (e) { var o = nav.classList.toggle('open'); e.currentTarget.setAttribute('aria-expanded', String(o)); });
@@ -22,12 +39,8 @@
     document.title = (name === 'home' ? '' : (NAV.filter(function (n) { return n[0] === '#/' + name; }).map(function (n) { return n[1] + ' · '; })[0] || '')) + 'Lịch sử & Địa lí — THCS Đak Đoa';
     nav.classList.remove('open'); if (name !== cur) { window.scrollTo(0, 0); if (cur !== null) main.focus({ preventScroll: true }); } cur = name;
   }
+  renderFooter();
   window.addEventListener('hashchange', render); render();
-  // Chân trang
-  var f = document.getElementById('foot'), s = D.school;
-  f.appendChild(h('div', null, h('h4', null, s.site), h('p', null, 'Cổng thông tin học tập, kiểm tra đánh giá môn Lịch sử và Địa lí. Hiệu trưởng: ' + s.principal + '.'), h('p', null, 'Phụ trách kỹ thuật & chuyên môn: ' + s.tech)));
-  f.appendChild(h('div', null, h('h4', null, 'Địa chỉ'), h('p', null, s.name + ', ' + s.address), h('p', null, 'Điện thoại: ' + s.phone)));
-  f.appendChild(h('div', null, h('h4', null, 'Giáo viên ' + s.dept + ' (' + s.teachers.length + ')'), h('ul', null, s.teachers.map(function (t) { return h('li', null, t); }))));
-  document.getElementById('copy').textContent = '© 2026 ' + s.name + ' — ' + s.site + '.';
+  if (D.examlib && D.examlib.enabled()) setTimeout(function () { D.examlib.refresh(); }, 600);
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(function () { });
 })();

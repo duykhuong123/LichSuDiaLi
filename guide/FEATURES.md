@@ -11,6 +11,12 @@
 - Công cụ giáo viên (thống kê đáp án, in đề + đáp án), sao lưu/khôi phục JSON
 - Tra cứu từ khóa trong kho kiến thức; chạy ngoại tuyến (service worker); thích ứng điện thoại; giảm chuyển động; liên kết bỏ qua; tiêu điểm bàn phím
 
+## Khu vực giáo viên (cần thiết lập Google Apps Script)
+Đăng nhập bằng mã 6 số gửi qua gmail (hiệu lực 10 phút, dùng một lần); danh sách giáo viên nằm trong Google Sheet riêng tư (trang GiaoVien). Khoá xem đề/đáp án/in đề đối với học sinh; chỉnh sửa thông tin trang. Chưa cấu hình `syncUrl` thì khu vực này bị khoá. Xem `GOOGLE-SHEET.md`.
+
+## Giáo viên tải đề lên
+Dán nội dung hoặc chọn tệp Word (.docx)/.txt → tự nhận 16 TN + Đúng/Sai + trả lời ngắn → báo lỗi theo từng dòng → Đăng cho học sinh / Lưu nháp; Sửa, Ẩn/Mở, Xóa; tổ trưởng/phó quản lý cả tổ; đáp án chỉ ở máy chủ, máy chủ tự chấm khi nộp (tối đa 2 lượt/đề), điểm tự về Sheet theo lớp. Cần máy chủ Google của tổ. Xem `HUONG-DAN-TAI-DE.md`.
+
 ## Phụ thuộc thiết lập bên ngoài (CHƯA có)
 Tài khoản đăng nhập, đồng bộ nhiều máy/bảng điểm chung, trợ lý AI, khóa/mở đề theo giờ có kiểm soát, chống gian lận mạnh. Xem `BACKEND-AI.md`.
 

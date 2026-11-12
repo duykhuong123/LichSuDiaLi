@@ -103,3 +103,6 @@ footer h4{color:var(--gold);font-size:.95rem}footer ul{margin:0;padding-left:1.1
 .bar select{max-width:100%}main{overflow-x:clip}
 
 .noselect,.noselect *{-webkit-user-select:none;user-select:none}.noselect input{-webkit-user-select:text;user-select:text}
+
+@media print{body.inexam main>*{display:none!important}body.inexam main::before{content:"Không được in nội dung khi đang làm bài.";display:block;padding:20px;font-size:18px}}
+.lock{opacity:.8}

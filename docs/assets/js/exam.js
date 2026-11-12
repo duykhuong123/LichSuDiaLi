@@ -32,7 +32,7 @@
       var nm = D.sync.normName((root.querySelector('#nm') || {}).value), cl = D.sync.normClass((root.querySelector('#cl') || {}).value), er = root.querySelector('#er');
       if (nm.length < 2) { er.textContent = 'Hãy nhập họ và tên.'; return; }
       if (!cl) { er.textContent = 'Lớp chưa đúng. Ví dụ: 6.1, 6/1, 7A2, 8-3, 9.4 (khối 6–9).'; return; }
-      a = build(id, (Date.now() & 0x7fffffff) ^ u.hash(id)); a.name = nm; a.cls = cl; save(); play();
+      a = build(id, (Date.now() & 0x7fffffff) ^ u.hash(id)); a.aid = D.sync.uid(); a.name = nm; a.cls = cl; save(); play();
     }
     function intro() {
       u.clear(root); var open = a && !a.done;
@@ -47,8 +47,8 @@
           h('input', { id: 'nm', class: 't', placeholder: 'Họ và tên', maxlength: 60, required: true, 'aria-label': 'Họ và tên' }),
           h('input', { id: 'cl', class: 't', placeholder: 'Lớp (vd 6.1 hoặc 6/1)', maxlength: 12, size: 18, required: true, 'aria-label': 'Lớp', oninput: function (e) { var c = D.sync.normClass(e.target.value); root.querySelector('#cn').textContent = c ? '→ Lớp ' + c : ''; } }), h('span', { id: 'cn', class: 'tag g', 'aria-live': 'polite' }),
           h('span', { id: 'er', style: 'color:var(--bad);font-weight:600', role: 'alert' }), h('button', { class: 'btn', onclick: start }, open ? 'Làm bài mới' : 'Bắt đầu làm bài'),
-          h('button', { class: 'btn ghost', onclick: function () { printSheet(id, false); } }, 'In đề A4'),
-          h('button', { class: 'btn ghost', onclick: function () { printSheet(id, true); } }, 'In đề + đáp án'))));
+          D.auth.isTeacher() ? h('button', { class: 'btn ghost', onclick: function () { printSheet(id, false); } }, 'In đề A4') : null,
+          D.auth.isTeacher() ? h('button', { class: 'btn ghost', onclick: function () { printSheet(id, true); } }, 'In đề + đáp án') : h('a', { class: 'btn ghost', href: '#/teacher' }, '🔒 In đề (dành cho giáo viên)'))));
     }
 
     /* Giám sát: rời trang/cửa sổ, thoát toàn màn hình; chặn sao chép. Lần đầu chỉ nhắc nhở (không tính). */
@@ -95,7 +95,7 @@
     }
     function left() { return Math.max(0, a.start + a.minutes * 60000 - Date.now()); }
     function play() {
-      clearInterval(timer); u.clear(root); watch(true);
+      clearInterval(timer); u.clear(root); watch(true); document.body.classList.add('inexam');
       var q = h('div', { class: 'qbox', id: 'q' }), nav = h('div', { class: 'nav', role: 'group', 'aria-label': 'Danh sách câu' }), tm = h('div', { class: 'timer', role: 'timer' });
       var side = h('aside', { class: 'side qbox' }, h('div', null, 'Thời gian còn lại'), tm, h('div', { class: 'note info', style: 'margin:8px 0;font-size:.8rem' }, 'Bài tự lưu nháp trên máy này.'), nav,
         h('div', { class: 'legend', style: 'margin:8px 0' }, h('span', null, h('i', { style: 'background:#dbe8f7' }), 'đã làm'), h('span', null, h('i', { style: 'background:#e0b45a' }), 'đánh dấu xem lại')),
@@ -130,13 +130,34 @@
       show(); tick(); timer = setInterval(tick, 1000);
     }
     function finish(timeUp, byViol) {
-      clearInterval(timer); watch(false); var d = grade(id, a), rec = { id: D.sync.uid(), viol: { n: (a.viol || {}).n || 0, counted: Math.max(0, ((a.viol || {}).n || 0) - policy(id).grace), advice: advice((a.viol || {}).n || 0, policy(id).grace), secs: Math.round((a.viol || {}).secs || 0), blocked: (a.viol || {}).blocked || 0, byViol: !!byViol, log: ((a.viol || {}).log || []).slice(0, 20) }, examId: id, title: m.title, name: a.name, cls: a.cls, score: d.total, max: 10, at: new Date().toISOString(), secs: Math.round((Date.now() - a.start) / 1000), timeUp: !!timeUp, src: 'local' };
+      clearInterval(timer); watch(false); document.body.classList.remove('inexam');
+      if (m.server) return finishRemote(timeUp, byViol);
+      var d = grade(id, a), rec = { id: D.sync.uid(), viol: { n: (a.viol || {}).n || 0, counted: Math.max(0, ((a.viol || {}).n || 0) - policy(id).grace), advice: advice((a.viol || {}).n || 0, policy(id).grace), secs: Math.round((a.viol || {}).secs || 0), blocked: (a.viol || {}).blocked || 0, byViol: !!byViol, log: ((a.viol || {}).log || []).slice(0, 20) }, examId: id, title: m.title, name: a.name, cls: a.cls, score: d.total, max: 10, at: new Date().toISOString(), secs: Math.round((Date.now() - a.start) / 1000), timeUp: !!timeUp, src: 'local' };
       var okSave = saveResult(rec); S.del(key); a.done = true; review(d, timeUp, okSave, rec, byViol);
+    }
+    /* Đề giáo viên tải lên: máy chủ chấm (đáp án không nằm trong trình duyệt cho tới khi nộp). */
+    function finishRemote(timeUp, byViol) {
+      if (!a.aid) { a.aid = D.sync.uid(); save(); }
+      var v = a.viol || {}, extra = { secs: Math.round((Date.now() - a.start) / 1000), leaves: v.n || 0, awaySecs: Math.round(v.secs || 0) };
+      u.clear(root); var box = h('div', { class: 'qbox', role: 'status', 'aria-live': 'polite' }, h('h2', null, m.title), h('p', null, 'Đang nộp bài và chấm điểm…')); root.appendChild(box);
+      D.examlib.submit(id, a, extra).then(function (j) {
+        var det = j.detail, n = 0;
+        set.mcq.forEach(function (q, i) { q.ans = det.m[i].ans; q.exp = det.m[i].exp; });
+        set.tf.items.forEach(function (it, k) { it.ans = det.t[k].ans; it.exp = det.t[k].exp; });
+        set.sa.ans = det.s.ans; set.sa.exp = det.s.exp; set.sa.alts = [];
+        var d = { mcq: det.m.map(function (x) { return x.ok; }), tf: det.t.map(function (x) { return x.ok; }), sa: det.s.ok ? SA_PT : 0, total: j.score };
+        var rec = { id: a.aid, viol: { n: v.n || 0, counted: Math.max(0, (v.n || 0) - policy(id).grace), advice: advice(v.n || 0, policy(id).grace), secs: Math.round(v.secs || 0), blocked: v.blocked || 0, byViol: !!byViol, log: (v.log || []).slice(0, 20) }, examId: id, title: m.title, name: a.name, cls: a.cls, score: j.score, max: 10, at: new Date().toISOString(), secs: extra.secs, timeUp: !!timeUp, src: 'server', sync: 'sent' };
+        var okSave = saveResult(rec); S.del(key); a.done = true; review(d, timeUp, okSave, rec, byViol);
+      }, function (e) {
+        u.clear(box); box.appendChild(h('h2', null, m.title)); box.appendChild(h('div', { class: 'note bad' }, 'Chưa nộp được bài: ' + e.message + ' Bài làm của em vẫn được giữ trên máy. Hãy kiểm tra mạng rồi bấm "Nộp lại".'));
+        box.appendChild(h('div', { class: 'bar', style: 'margin-top:10px' }, h('button', { class: 'btn', onclick: function () { finishRemote(timeUp, byViol); } }, 'Nộp lại')));
+        if (/tối đa|đã đóng|không hợp lệ|Thiếu/.test(e.message)) box.appendChild(h('a', { class: 'btn ghost', href: '#/exams', style: 'margin-left:8px' }, 'Các đề khác'));
+      });
     }
     function review(d, timeUp, okSave, rec, byViol) {
       u.clear(root); var wrap = h('div', null), syncBox = h('div', { class: 'note', role: 'status', 'aria-live': 'polite' });
       function paint(st, msg) { syncBox.className = 'note ' + (st === 'sent' ? 'ok' : st === 'failed' ? 'bad' : 'info'); u.clear(syncBox); syncBox.appendChild(document.createTextNode(st === 'sent' ? 'Đã gửi điểm về bảng điểm của tổ (máy chủ đã xác nhận).' : st === 'pending' ? 'Đang gửi điểm…' : st === 'failed' ? 'CHƯA gửi được điểm (' + (msg || 'lỗi mạng') + '). Điểm vẫn lưu trên máy này; hãy giữ trang, bật mạng rồi bấm Gửi lại.' : 'Chưa cấu hình gửi điểm: kết quả chỉ nằm trên máy này.')); if (st === 'failed') syncBox.appendChild(h('button', { class: 'btn sm', style: 'margin-left:8px', onclick: function () { D.sync.submit(rec, paint); } }, 'Gửi lại')); }
-      if (rec) D.sync.submit(rec, paint);
+      if (rec && rec.src === 'server') paint('sent'); else if (rec) D.sync.submit(rec, paint);
       wrap.appendChild(h('div', { class: 'qbox' }, h('h2', null, m.title), byViol ? h('div', { class: 'note bad' }, 'Bài được NỘP TỰ ĐỘNG vì rời trang làm bài quá số lần cho phép.') : timeUp ? h('div', { class: 'note' }, 'Hết giờ — bài đã được nộp tự động.') : null,
         h('div', { class: 'score' }, u.fmt(d.total) + ' / 10'),
         h('p', null, 'Trắc nghiệm: ' + u.fmt(d.mcq.filter(Boolean).length * MCQ_PT) + '/8 · Đúng/Sai: ' + u.fmt(d.tf.filter(Boolean).length * TF_PT) + '/1 · Trả lời ngắn: ' + u.fmt(d.sa) + '/1'),
@@ -159,11 +180,12 @@
       root.appendChild(wrap); window.scrollTo(0, 0);
     }
     if (a && a.done) a = null; intro();
-    root._stop = function () { clearInterval(timer); watch(false); };
+    root._stop = function () { clearInterval(timer); watch(false); document.body.classList.remove('inexam'); };
   }
 
   /* In đề A4 (giữ nguyên thứ tự gốc; đáp án chỉ in khi chọn) */
   function printSheet(id, withKey) {
+    if (!D.auth.guard()) return;
     var m = meta(id), set = D.examSets[id], box = document.getElementById('print'); u.clear(box);
     box.appendChild(h('div', { style: 'text-align:center' }, h('div', null, 'TRƯỜNG THCS ĐAK ĐOA — TỔ LỊCH SỬ - ĐỊA LÍ'), h('h2', null, m.title), h('div', null, 'Năm học ' + (u.store.get('year', D.school.year)) + ' · Thời gian: ' + m.minutes + ' phút · Họ tên: ................................ Lớp: ......')));
     box.appendChild(h('p', null, 'I. TRẮC NGHIỆM (8,0 điểm — mỗi câu 0,5 điểm). Chọn một đáp án đúng.'));

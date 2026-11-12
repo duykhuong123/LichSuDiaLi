@@ -7,11 +7,11 @@
     site: 'LỊCH SỬ VÀ ĐỊA LÍ - ĐAK ĐOA',
     year: '2026-2027',
     years: ['2025-2026', '2026-2027'],
-    principal: 'Bà Phan Thị Thùy Trang',
+    principal: '',
     phone: '02693 831 138',
     address: '25 Lê Hồng Phong, Thôn 9, xã Đak Đoa, tỉnh Gia Lai',
     tech: 'Thầy Nguyễn Văn Duy Khương',
-    teachers: ['Cô Trương Thị Thu Hà', 'Cô Trương Thị Thanh Thủy', 'Thầy Nguyễn Văn Duy Khương', 'Cô Trần Thị Lệ', 'Cô Đinh Thị Xuân Nương', 'Cô Nguyễn Thị Tuyết', 'Cô Nguyễn Thị An', 'Cô Phùng Thị Trang', 'Thầy Lê Mạnh Cường', 'Cô Nhữ Thị Hà', 'Cô Phạm Bích Tuyết']
+    teachers: ['Cô Trương Thị Thu Hà', 'Cô Trương Thị Thanh Thủy', 'Thầy Nguyễn Văn Duy Khương', 'Cô Trần Thị Lệ', 'Cô Đinh Thị Xuân Nương', 'Cô Lê Thị Ánh Tuyết', 'Cô Nguyễn Thị An', 'Cô Phùng Thị Trang', 'Thầy Lê Mạnh Cường', 'Cô Nhữ Thị Hà', 'Cô Phạm Thị Bích Tuyết']
   };
   // minutes: thời gian làm bài (phút). opensAt: ISO có múi giờ +07:00 (chỉ để hiển thị lịch, không khóa đề).
   D.exams = [
